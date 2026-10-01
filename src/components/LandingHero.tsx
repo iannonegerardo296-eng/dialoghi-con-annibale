@@ -109,7 +109,6 @@ export function LandingHero() {
           <span className="hero-medallion-tick hero-medallion-tick--right" />
         </div>
         <div className="hero-medallion-center">
-          <span className="hero-medallion-monogram">H</span>
           <span className="hero-medallion-name">Barca</span>
           <span className="hero-medallion-era">III · secolo a.C.</span>
         </div>

@@ -33,11 +33,16 @@ function isApiMessage(value: unknown): value is ApiMessage {
 function parseChoiceContent(content: unknown): string | null {
   if (typeof content === "string") return content.trim() || null;
   if (Array.isArray(content)) {
-    const first = content.find((part) => typeof part === "object" && part !== null && "text" in part);
-    if (first && typeof first === "object" && "text" in first) {
-      const text = first.text;
-      if (typeof text === "string") return text.trim() || null;
-    }
+    const text = content
+      .flatMap((part) =>
+        typeof part === "object" && part !== null && "text" in part &&
+        typeof part.text === "string"
+          ? [part.text]
+          : [],
+      )
+      .join("")
+      .trim();
+    return text || null;
   }
   return null;
 }
@@ -204,7 +209,7 @@ export async function POST(request: NextRequest) {
   const sourceQualityInstruction =
     sources.length === 1
       ? "È disponibile una sola voce: non dire che hai confrontato più fonti, mantieni prudenti i dettagli e dichiara brevemente che il riscontro online è limitato."
-      : "Usa solo le voci che supportano davvero il fatto citato; più voci di Wikipedia, anche in lingue diverse, non sono automaticamente conferme indipendenti.";
+      : "Usa solo le voci che supportano davvero il fatto citato; più voci della stessa enciclopedia non sono automaticamente conferme indipendenti.";
 
   try {
     const headers: Record<string, string> = {
@@ -254,19 +259,24 @@ VINCOLO FINALE: scrivi l'intera risposta esclusivamente in italiano, anche se l'
         : {}),
     });
 
-    const sendToProvider = (messages: typeof completionMessages) =>
-      fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: createCompletionBody(messages),
-        signal: AbortSignal.timeout(90_000),
-      });
+    const sendToProvider = async (messages: typeof completionMessages) => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const upstream = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body: createCompletionBody(messages),
+          signal: AbortSignal.timeout(90_000),
+        });
+        if (![502, 503, 504].includes(upstream.status) || attempt === 1) {
+          return upstream;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      throw new Error("The LLM provider retry did not return a response");
+    };
 
     let upstream = await sendToProvider(completionMessages);
-    if ([502, 503, 504].includes(upstream.status)) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      upstream = await sendToProvider(completionMessages);
-    }
 
     if (!upstream.ok) {
       console.error("LLM provider returned an error", { status: upstream.status });
@@ -306,12 +316,12 @@ VINCOLO FINALE: scrivi l'intera risposta esclusivamente in italiano, anche se l'
 
     if (!hasCompleteSourceCitations(content, sources.length)) {
       const correctionMessages: typeof completionMessages = [
-        ...completionMessages,
-        { role: "assistant", content },
+        systemMessage,
+        ...body.messages,
         {
           role: "user",
           content:
-            "Riscrivi la risposta precedente. Controlla ogni frase: cita con [n] ogni fatto storico usando soltanto le fonti che lo documentano, elimina i dettagli non sostenuti e lascia senza citazione solo le emozioni esplicitamente ipotetiche. Restituisci solo la risposta corretta in italiano.",
+            "Rispondi di nuovo da zero all'ultima domanda, senza riprendere la risposta precedente. Scrivi 1-2 frasi concise in prima persona come Annibale. Basa ogni fatto esclusivamente sugli estratti storici forniti e aggiungi a ciascuna frase fattuale il riferimento [n] della fonte che la documenta. Non aggiungere dettagli non presenti nelle fonti. Restituisci solo la risposta in italiano.",
         },
       ];
       upstream = await sendToProvider(correctionMessages);

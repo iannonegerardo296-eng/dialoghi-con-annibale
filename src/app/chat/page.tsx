@@ -519,7 +519,6 @@ export default function Home() {
         <aside className="context-rail" aria-label="Contesto storico">
           <div className="portrait-context">
             <AnnibalAvatar status={status} />
-            <p className="portrait-caption-note">Rappresentazione artistica, non ritratto documentario.</p>
           </div>
           <div id="context-card">
             <HistoricalContext />

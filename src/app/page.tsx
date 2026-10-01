@@ -9,7 +9,6 @@ export default function Home() {
       <div className="landing-container">
         <header className="landing-header">
           <Link className="landing-brand" href="/" aria-label="Dialoghi con Annibale, pagina iniziale">
-            <span className="sidebar-brand-mark" aria-hidden="true">H</span>
             <span>
               <strong>Dialoghi</strong>
               <small>con Annibale</small>

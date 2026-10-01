@@ -501,14 +501,8 @@ img {
   text-align: center;
 }
 
-.hero-medallion-monogram {
-  color: rgba(210, 174, 112, 0.78);
-  font: 400 clamp(54px, 8vw, 88px)/0.95 var(--serif);
-  text-shadow: 0 0 28px rgba(184, 137, 69, 0.25);
-}
-
 .hero-medallion-name {
-  margin-top: 9px;
+  margin-top: 0;
   color: #d5c39e;
   font: 500 12px var(--serif);
   letter-spacing: 0.25em;
@@ -2342,16 +2336,26 @@ img {
   top: 18px;
   height: calc(100svh - 36px);
   display: flex;
+  min-width: 0;
   flex-direction: column;
   gap: 19px;
   padding: 24px 18px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 20px;
   background: linear-gradient(160deg, #1a2021, #171d1e);
 }
 
+.context-rail .portrait-context {
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
 .context-rail .portrait-card {
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 17px;
@@ -2360,6 +2364,7 @@ img {
 
 .context-rail .portrait-art {
   aspect-ratio: 0.96;
+  min-width: 0;
   overflow: hidden;
   border-radius: 15px 15px 0 0;
   background: #202626;
@@ -2370,8 +2375,22 @@ img {
   border-radius: 45% 45% 8px 8px;
 }
 
+.context-rail .portrait-bob {
+  display: grid;
+  width: min(82%, 196px);
+  max-height: 100%;
+  place-items: center;
+}
+
+.context-rail .portrait-image {
+  width: 100%;
+  max-height: 230px;
+  object-fit: contain;
+}
+
 .context-rail .portrait-info {
-  padding: 15px 2px 8px;
+  min-width: 0;
+  padding: 14px 16px 11px;
 }
 
 .context-rail .portrait-info h2 {
@@ -2379,14 +2398,7 @@ img {
 }
 
 .context-rail .portrait-motto {
-  padding: 0 2px 5px;
-}
-
-.portrait-caption-note {
-  margin: -10px 0 0;
-  color: #858b84;
-  font-size: 9px;
-  line-height: 1.5;
+  padding: 0 16px 14px;
 }
 
 .context-rail #context-card {
@@ -2450,7 +2462,7 @@ img {
 .landing-brand {
   display: inline-flex;
   align-items: center;
-  gap: 11px;
+  gap: 0;
   color: var(--parchment);
   text-decoration: none;
 }
@@ -3057,15 +3069,6 @@ img {
 
   .landing-header {
     min-height: 66px;
-  }
-
-  .landing-brand {
-    gap: 8px;
-  }
-
-  .landing-brand .sidebar-brand-mark {
-    width: 33px;
-    height: 33px;
   }
 
   .landing-header-link {

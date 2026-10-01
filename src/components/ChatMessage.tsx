@@ -142,7 +142,12 @@ export function ChatMessage({ message, animate = false }: ChatMessageProps) {
                     <summary>
                       <span className="source-number">[{index + 1}]</span>
                       <span>{source.title}</span>
-                      <span className="source-language">{source.language === "Wikipedia (inglese)" ? "EN" : "IT"}</span>
+                      <span
+                        className="source-language"
+                        title={source.language === "Wikipedia (inglese)" ? "Fonte in inglese" : "Fonte in italiano"}
+                      >
+                        {source.language === "Wikipedia (inglese)" ? "EN" : "IT"}
+                      </span>
                     </summary>
                     <p>{source.excerpt}</p>
                     <a className="chat-source-link" href={source.url} target="_blank" rel="noreferrer">

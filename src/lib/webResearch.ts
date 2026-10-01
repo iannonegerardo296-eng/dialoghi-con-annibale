@@ -46,7 +46,6 @@ interface RestSummaryResponse {
 
 const WIKIS = [
   { language: "it", name: "Wikipedia (italiano)", origin: "https://it.wikipedia.org" },
-  { language: "en", name: "Wikipedia (inglese)", origin: "https://en.wikipedia.org" },
 ] as const;
 
 const USER_AGENT = "DialoghiConAnnibale/1.0 (historical education; server-side research)";
@@ -56,7 +55,6 @@ const researchCache = new Map<string, { expiresAt: number; sources: WebSource[] 
 
 interface HistoricalTopic {
   query: string;
-  englishQuery: string;
   matches: RegExp;
   relevantSource: RegExp;
   relevantTitle?: RegExp;
@@ -65,62 +63,52 @@ interface HistoricalTopic {
 const HISTORICAL_TOPICS: HistoricalTopic[] = [
   {
     query: "battaglia di Canne",
-    englishQuery: "Battle of Cannae",
     matches: /battaglia\s+di\s+canne|battle\s+of\s+cannae|\bcannae\b/i,
     relevantSource: /216\s*(?:a\.?\s*c\.?|bc)|seconda\s+guerra\s+punica|second\s+punic\s+war|battaglia\s+di\s+canne|battle\s+of\s+cannae/i,
     relevantTitle: /^(battaglia di canne|battle of cannae|luogo della battaglia di canne|hannibal)$/i,
   },
   {
     query: "attraversamento delle Alpi di Annibale",
-    englishQuery: "Hannibal's crossing of the Alps",
     matches: /attravers\w*\s+(?:le\s+)?alpi|cross\w*\s+the\s+alps|\balps\b/i,
     relevantSource: /hannibal|annibale|218\s*(?:a\.?\s*c\.?|bc)|seconda\s+guerra\s+punica|second\s+punic\s+war/i,
   },
   {
     query: "seconda guerra punica",
-    englishQuery: "Second Punic War",
     matches: /seconda\s+guerra\s+punica|second\s+punic\s+war/i,
     relevantSource: /seconda\s+guerra\s+punica|second\s+punic\s+war|annibale|hannibal/i,
   },
   {
     query: "battaglia del lago Trasimeno",
-    englishQuery: "Battle of Lake Trasimene",
     matches: /trasimeno|trasimene/i,
     relevantSource: /trasimeno|trasimene|217\s*(?:a\.?\s*c\.?|bc)|seconda\s+guerra\s+punica|second\s+punic\s+war/i,
   },
   {
     query: "battaglia della Trebbia",
-    englishQuery: "Battle of the Trebia",
     matches: /battaglia\s+della\s+trebbia|battle\s+of\s+the\s+trebia|\btrebbia\b/i,
     relevantSource: /trebbia|trebia|218\s*(?:a\.?\s*c\.?|bc)|seconda\s+guerra\s+punica|second\s+punic\s+war/i,
   },
   {
     query: "battaglia di Zama",
-    englishQuery: "Battle of Zama",
     matches: /battaglia\s+di\s+zama|battle\s+of\s+zama|\bzama\b/i,
     relevantSource: /zama|202\s*(?:a\.?\s*c\.?|bc)|scipione|scipio|seconda\s+guerra\s+punica|second\s+punic\s+war/i,
   },
   {
     query: "assedio di Sagunto",
-    englishQuery: "Siege of Saguntum",
     matches: /sagunto|saguntum/i,
     relevantSource: /sagunto|saguntum|seconda\s+guerra\s+punica|second\s+punic\s+war|hannibal|annibale/i,
   },
   {
     query: "Cartagine",
-    englishQuery: "Carthage",
     matches: /cartagine|carthage/i,
     relevantSource: /cartagine|carthage|punic|fenici/i,
   },
   {
     query: "Scipione l'Africano",
-    englishQuery: "Scipio Africanus",
     matches: /scipione|scipio/i,
     relevantSource: /scipione|scipio|zama|hannibal|annibale/i,
   },
   {
     query: "Annibale Barca",
-    englishQuery: "Hannibal Barca",
     matches: /annibale|hannibal/i,
     relevantSource: /annibale|hannibal|barca|cartagine|carthage/i,
   },
@@ -161,17 +149,14 @@ function simplifySearchQuery(query: string): string {
     .trim();
 }
 
-function buildSearchQueries(query: string, language: "it" | "en"): string[] {
-  const localizedQuery = language === "en" ? translateHistoricalTerms(query) : query;
-  const simpleQuery = simplifySearchQuery(localizedQuery);
-  const queries = [simpleQuery || localizedQuery];
+function buildSearchQueries(query: string): string[] {
+  const simpleQuery = simplifySearchQuery(query);
+  const queries = [simpleQuery || query];
   const topic = HISTORICAL_TOPICS.find((item) => item.matches.test(query));
   if (topic) {
-    queries.unshift(language === "en" ? topic.englishQuery : topic.query);
+    queries.unshift(topic.query);
   } else {
-    queries.push(
-      `${language === "en" ? "Hannibal Barca" : "Annibale Barca"} ${queries[0]}`,
-    );
+    queries.push(`Annibale Barca ${queries[0]}`);
   }
 
   return [...new Set(queries.filter(Boolean))].slice(0, 2);
@@ -256,7 +241,7 @@ async function searchWiki(
   wiki: (typeof WIKIS)[number],
   query: string,
 ): Promise<WebSource[]> {
-  const queries = buildSearchQueries(query, wiki.language);
+  const queries = buildSearchQueries(query);
   const pages: MediaWikiSearchPage[] = [];
   let lastSearchError: unknown;
 
@@ -328,7 +313,7 @@ async function searchRestWiki(
   wiki: (typeof WIKIS)[number],
   query: string,
 ): Promise<WebSource[]> {
-  const queries = buildSearchQueries(query, wiki.language);
+  const queries = buildSearchQueries(query);
   const pages: RestSearchPage[] = [];
   let lastSearchError: unknown;
 
