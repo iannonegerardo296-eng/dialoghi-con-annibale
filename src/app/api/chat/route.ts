@@ -62,7 +62,7 @@ function hasCompleteSourceCitations(content: string, sourceCount: number): boole
     .split(/(?<=[.!?])\s+(?=[\p{Lu}“«])/u)
     .filter((sentence) => sentence.trim().length > 0);
   const speculativeOpening =
-    /^\s*(?:posso solo immaginare|non posso sapere|non posso affermare|se provo a immaginarmi|a mio giudizio|secondo me|immagino|immaginerei|avrei provato|avrei sentito)\b/i;
+    /^\s*(?:posso solo immaginare|non posso sapere|non posso affermare|non posso ricordare|se provo a immaginarmi|se provo a immaginare|se immagino|immaginando|a mio giudizio|a mio avviso|secondo me|per me|ai miei occhi|immagino|immaginerei|avrei provato|avrei sentito|avrei visto|mi sarebbe apparso|mi appariva|roma mi appariva)\b/i;
 
   return sentences.every((sentence) => {
     if (speculativeOpening.test(sentence)) return true;
@@ -90,9 +90,13 @@ function isAppCapabilityQuestion(question: string): boolean {
 
   return /^(?:(?:dimmi|mi dici|spiegami) )?(?:(?:e )?(?:tu )?)?(?:cosa|che cosa) (?:puoi|sai|riesci a) (?:fare|raccontare|spiegare|conoscere|aiutarmi)(?: in questa chat| in generale| esattamente)?$/.test(
     normalized,
-  ) || /^(?:quali argomenti|di cosa) (?:posso|dovrei) (?:chiederti|parlarti)(?: in questa chat)?$/.test(
-    normalized,
-  );
+  ) || /^(?:cosa|che cosa) posso chiederti$/.test(normalized) ||
+    /^(?:quali domande|quali argomenti) posso (?:farti|chiederti)$/.test(normalized) ||
+    /^(?:di cosa|su cosa) posso parlarti$/.test(normalized) ||
+    /^come puoi aiutarmi$/.test(normalized) ||
+    /^(?:quali argomenti|di cosa) (?:posso|dovrei) (?:chiederti|parlarti)(?: in questa chat)?$/.test(
+      normalized,
+    );
 }
 
 function buildHistoricalResearchQuery(messages: ApiMessage[]): string {

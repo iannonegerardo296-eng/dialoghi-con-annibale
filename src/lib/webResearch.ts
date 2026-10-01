@@ -48,7 +48,8 @@ const WIKIS = [
   { language: "it", name: "Wikipedia (italiano)", origin: "https://it.wikipedia.org" },
 ] as const;
 
-const USER_AGENT = "DialoghiConAnnibale/1.0 (historical education; server-side research)";
+const USER_AGENT =
+  "DialoghiConAnnibale/1.0 (https://github.com/iannonegerardo296-eng/dialoghi-con-annibale; historical education)";
 const MAX_EXCERPT_LENGTH = 3200;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const researchCache = new Map<string, { expiresAt: number; sources: WebSource[] }>();
@@ -58,6 +59,7 @@ interface HistoricalTopic {
   matches: RegExp;
   relevantSource: RegExp;
   relevantTitle?: RegExp;
+  fallbackPageKeys?: string[];
 }
 
 const HISTORICAL_TOPICS: HistoricalTopic[] = [
@@ -106,11 +108,25 @@ const HISTORICAL_TOPICS: HistoricalTopic[] = [
     query: "Scipione l'Africano",
     matches: /scipione|scipio/i,
     relevantSource: /scipione|scipio|zama|hannibal|annibale/i,
+    fallbackPageKeys: ["Publio_Cornelio_Scipione"],
+  },
+  {
+    query: "Annibale e Roma",
+    matches: /\broma\b|romano|repubblica romana/i,
+    relevantSource: /annibale|hannibal|roma|romano|cartagine|punic/i,
+    fallbackPageKeys: ["Annibale", "Seconda_guerra_punica"],
+  },
+  {
+    query: "Annibale e la sua famiglia",
+    matches: /famiglia|padre|amilcare|figli|fratelli/i,
+    relevantSource: /annibale|amilcare|barca|asdrubale|magone/i,
+    fallbackPageKeys: ["Annibale", "Amilcare_Barca"],
   },
   {
     query: "Annibale Barca",
     matches: /annibale|hannibal/i,
     relevantSource: /annibale|hannibal|barca|cartagine|carthage/i,
+    fallbackPageKeys: ["Annibale"],
   },
 ];
 
@@ -215,13 +231,28 @@ async function wikipediaJson<T>(url: URL): Promise<T> {
       if (response.ok) return (await response.json()) as T;
 
       const error = new Error(`Wikipedia API returned HTTP ${response.status}`);
-      if (response.status !== 429 && response.status < 500) throw error;
+      if (response.status === 429) {
+        const retryAfterHeader = response.headers.get("retry-after");
+        const retryAfterSeconds = Number(retryAfterHeader);
+        const retryDelayMs = retryAfterHeader === null
+          ? 1000
+          : Number.isFinite(retryAfterSeconds)
+            ? retryAfterSeconds * 1000
+            : Date.parse(retryAfterHeader) - Date.now();
+
+        if (attempt < 2 && Number.isFinite(retryDelayMs) && retryDelayMs <= 2000) {
+          await new Promise((resolve) => setTimeout(resolve, Math.max(0, retryDelayMs)));
+          continue;
+        }
+        throw error;
+      }
+      if (response.status < 500) throw error;
       lastError = error;
     } catch (error) {
       lastError = error;
       if (
         error instanceof Error &&
-        /^Wikipedia API returned HTTP (?!429)[45]\d{2}$/.test(error.message)
+        /^Wikipedia API returned HTTP 4\d{2}$/.test(error.message)
       ) {
         throw error;
       }
@@ -372,6 +403,36 @@ async function searchRestWiki(
     );
 }
 
+async function fetchKnownWikiPages(
+  wiki: (typeof WIKIS)[number],
+  pageKeys: string[],
+): Promise<WebSource[]> {
+  const results = await Promise.allSettled(
+    pageKeys.map(async (pageKey): Promise<WebSource | null> => {
+      const summaryUrl = new URL(
+        `${wiki.origin}/api/rest_v1/page/summary/${encodeURIComponent(pageKey)}`,
+      );
+      const summary = await wikipediaJson<RestSummaryResponse>(summaryUrl);
+      if (typeof summary.extract !== "string" || summary.extract.trim().length <= 80) {
+        return null;
+      }
+
+      return {
+        title: summary.title ?? pageKey.replace(/_/g, " "),
+        url:
+          summary.content_urls?.desktop?.page ??
+          `${wiki.origin}/wiki/${encodeURIComponent(pageKey)}`,
+        excerpt: summary.extract.slice(0, MAX_EXCERPT_LENGTH),
+        language: wiki.name,
+      };
+    }),
+  );
+
+  return results.flatMap((result) =>
+    result.status === "fulfilled" && result.value ? [result.value] : [],
+  );
+}
+
 async function findHistoricalSources(query: string): Promise<WebSource[]> {
   const primaryResults = await Promise.allSettled(
     WIKIS.map((wiki) => searchWiki(wiki, query)),
@@ -381,7 +442,7 @@ async function findHistoricalSources(query: string): Promise<WebSource[]> {
   );
 
   let restResults: PromiseSettledResult<WebSource[]>[] = [];
-  if (sources.length < 3) {
+  if (sources.length === 0) {
     restResults = await Promise.allSettled(
       WIKIS.map((wiki) => searchRestWiki(wiki, query)),
     );
@@ -389,21 +450,20 @@ async function findHistoricalSources(query: string): Promise<WebSource[]> {
       result.status === "fulfilled" ? result.value : [],
     )];
 
-    if (sources.length === 0) {
-      const failures = [...primaryResults, ...restResults].filter(
-        (result) => result.status === "rejected",
-      );
-      throw new Error(
-        failures.length === primaryResults.length + restResults.length
-          ? "Historical web research services are unavailable"
-          : "No suitable historical pages were found",
-      );
-    }
   }
 
-  const uniqueSources = filterTopicSources(sources, query).filter(
+  let uniqueSources = filterTopicSources(sources, query).filter(
     (source, index, all) => all.findIndex((item) => item.url === source.url) === index,
   );
+
+  if (uniqueSources.length === 0) {
+    const topic = HISTORICAL_TOPICS.find((item) => item.matches.test(query));
+    const fallbackPageKeys = topic?.fallbackPageKeys ?? ["Annibale"];
+    const fallbackSources = await fetchKnownWikiPages(WIKIS[0], fallbackPageKeys);
+    uniqueSources = filterTopicSources(fallbackSources, query).filter(
+      (source, index, all) => all.findIndex((item) => item.url === source.url) === index,
+    );
+  }
 
   if (uniqueSources.length === 0) {
     const primaryCount = primaryResults.reduce(
@@ -414,7 +474,14 @@ async function findHistoricalSources(query: string): Promise<WebSource[]> {
       (count, result) => count + (result.status === "fulfilled" ? result.value.length : 0),
       0,
     );
-    throw new Error(`No relevant historical sources were found (primary: ${primaryCount}, REST: ${restCount})`);
+    const failures = [...primaryResults, ...restResults].filter(
+      (result) => result.status === "rejected",
+    );
+    throw new Error(
+      failures.length === primaryResults.length + restResults.length && sources.length === 0
+        ? "Historical web research services are unavailable"
+        : `No relevant historical sources were found (primary: ${primaryCount}, REST: ${restCount})`,
+    );
   }
 
   return uniqueSources.slice(0, 6);
