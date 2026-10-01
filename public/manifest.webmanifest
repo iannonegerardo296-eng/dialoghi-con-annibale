@@ -1,0 +1,17 @@
+{
+  "name": "Dialoghi con Annibale",
+  "short_name": "Annibale",
+  "description": "Chat storica con una ricostruzione conversazionale di Annibale Barca.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#10151B",
+  "theme_color": "#10151B",
+  "icons": [
+    {
+      "src": "/avatar-placeholder.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

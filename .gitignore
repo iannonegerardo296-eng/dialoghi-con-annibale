@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+coverage/
+data/
+.vercel/
+.agents/
+.claude/
+skills-lock.json
+.env*
+!.env.local.example
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.vercel
