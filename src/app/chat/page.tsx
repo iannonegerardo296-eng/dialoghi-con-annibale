@@ -319,7 +319,7 @@ export default function Home() {
         const answer = payload as ChatResponse;
         const assistantMessage = {
           ...createMessage("assistant", answer.response),
-          sources: answer.sources,
+          ...(answer.sources.length > 0 ? { sources: answer.sources } : {}),
         };
         setConversationStore((current) => ({
           ...current,
