@@ -23,9 +23,11 @@ export function AnnibalAvatar({ status }: AnnibalAvatarProps) {
   useEffect(() => {
     const portrait = portraitRef.current;
     if (!portrait) return;
+    const shouldReduceMotion =
+      reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const context = gsap.context(() => {
-      if (reducedMotion) {
+      if (shouldReduceMotion) {
         gsap.set(".portrait-bob", { y: 0, rotation: 0 });
         gsap.set(".portrait-glow", { opacity: 0.45 });
         return;
@@ -35,14 +37,20 @@ export function AnnibalAvatar({ status }: AnnibalAvatarProps) {
 
       if (status === "thinking") {
         gsap.to(".portrait-bob", {
-          y: 3,
-          rotation: -1.1,
-          duration: 0.8,
-          ease: "power2.inOut",
+          y: 2,
+          rotation: -0.7,
+          duration: 1.7,
+          ease: "sine.inOut",
           yoyo: true,
-          repeat: 1,
+          repeat: -1,
         });
-        gsap.to(".portrait-glow", { opacity: 0.23, duration: 0.6 });
+        gsap.to(".portrait-glow", {
+          opacity: 0.3,
+          duration: 1.35,
+          ease: "sine.inOut",
+          yoyo: true,
+          repeat: -1,
+        });
         return;
       }
 

@@ -69,7 +69,7 @@ export function ResponseLengthMenu({ value, onChange }: ResponseLengthMenuProps)
   useEffect(() => {
     if (!open || !menuRef.current) return;
 
-    if (reducedMotion) {
+    if (reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       menuRef.current.style.opacity = "1";
       menuRef.current.style.transform = "translateY(0) scale(1)";
       return;

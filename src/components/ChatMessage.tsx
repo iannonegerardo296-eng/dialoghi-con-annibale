@@ -45,6 +45,7 @@ export function ChatMessage({ message, animate = false }: ChatMessageProps) {
   const messageRef = useRef<HTMLElement>(null);
   const reducedMotion = useReducedMotion();
   const isAssistant = message.role === "assistant";
+  const isHistoricalFallback = message.isHistoricalFallback === true;
   const characters = useMemo(() => Array.from(message.content), [message.content]);
   const [displayTime, setDisplayTime] = useState("");
   const [visibleCharacters, setVisibleCharacters] = useState(
@@ -68,7 +69,7 @@ export function ChatMessage({ message, animate = false }: ChatMessageProps) {
       return;
     }
 
-    if (reducedMotion) {
+    if (reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setVisibleCharacters(message.content.length);
       return;
     }
@@ -93,7 +94,13 @@ export function ChatMessage({ message, animate = false }: ChatMessageProps) {
   }, [animate, message.content, reducedMotion]);
 
   useEffect(() => {
-    if (reducedMotion || !messageRef.current) return;
+    if (
+      reducedMotion ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      !messageRef.current
+    ) {
+      return;
+    }
 
     const context = gsap.context(() => {
       gsap.fromTo(
@@ -108,15 +115,21 @@ export function ChatMessage({ message, animate = false }: ChatMessageProps) {
 
   return (
     <article
-      className={`chat-message chat-message--${message.role}`}
+      className={`chat-message chat-message--${message.role}${isHistoricalFallback ? " chat-message--fallback" : ""}`}
       ref={messageRef}
-      aria-label={isAssistant ? "Risposta di Annibale" : "Il tuo messaggio"}
+      aria-label={
+        isHistoricalFallback
+          ? "Scheda storica di riferimento"
+          : isAssistant
+            ? "Risposta di Annibale"
+            : "Il tuo messaggio"
+      }
     >
       {isAssistant && <div className="message-seal" aria-hidden="true">H</div>}
 
       <div className="message-body">
         <div className="message-meta">
-          <strong>{isAssistant ? "Annibale" : "Tu"}</strong>
+          <strong>{isHistoricalFallback ? "Riscontro storico" : isAssistant ? "Annibale" : "Tu"}</strong>
           <time dateTime={new Date(message.createdAt).toISOString()}>
             {displayTime || "\u00a0"}
           </time>
@@ -133,8 +146,8 @@ export function ChatMessage({ message, animate = false }: ChatMessageProps) {
         </p>
 
         {isAssistant && message.sources && visibleCharacters >= characters.length && (
-          <aside className="chat-sources" aria-label="Fonti web consultate">
-            <span className="chat-sources-title">Fonti consultate · apri l’estratto per verificare</span>
+          <aside className="chat-sources" aria-label="Fonti storiche consultate">
+            <span className="chat-sources-title">Fonti di riferimento · apri la scheda per verificarla</span>
             <ul>
               {message.sources.map((source, index) => (
                 <li key={source.url}>

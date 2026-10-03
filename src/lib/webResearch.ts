@@ -1,4 +1,5 @@
 import type { WebSource } from "@/lib/chatTypes";
+import { HISTORICAL_KNOWLEDGE } from "@/lib/historicalKnowledge";
 
 interface MediaWikiSearchPage {
   pageid: number;
@@ -78,31 +79,37 @@ const HISTORICAL_TOPICS: HistoricalTopic[] = [
     query: "seconda guerra punica",
     matches: /seconda\s+guerra\s+punica|second\s+punic\s+war/i,
     relevantSource: /seconda\s+guerra\s+punica|second\s+punic\s+war|annibale|hannibal/i,
+    fallbackPageKeys: ["Seconda_guerra_punica", "Annibale", "Zama"],
   },
   {
     query: "battaglia del lago Trasimeno",
     matches: /trasimeno|trasimene/i,
     relevantSource: /trasimeno|trasimene|217\s*(?:a\.?\s*c\.?|bc)|seconda\s+guerra\s+punica|second\s+punic\s+war/i,
+    fallbackPageKeys: ["Battaglia_del_lago_Trasimeno", "Seconda_guerra_punica"],
   },
   {
     query: "battaglia della Trebbia",
     matches: /battaglia\s+della\s+trebbia|battle\s+of\s+the\s+trebia|\btrebbia\b/i,
     relevantSource: /trebbia|trebia|218\s*(?:a\.?\s*c\.?|bc)|seconda\s+guerra\s+punica|second\s+punic\s+war/i,
+    fallbackPageKeys: ["Battaglia_della_Trebbia", "Seconda_guerra_punica"],
   },
   {
     query: "battaglia di Zama",
     matches: /battaglia\s+di\s+zama|battle\s+of\s+zama|\bzama\b/i,
     relevantSource: /zama|202\s*(?:a\.?\s*c\.?|bc)|scipione|scipio|seconda\s+guerra\s+punica|second\s+punic\s+war/i,
+    fallbackPageKeys: ["Battaglia_di_Zama", "Seconda_guerra_punica"],
   },
   {
     query: "assedio di Sagunto",
     matches: /sagunto|saguntum/i,
     relevantSource: /sagunto|saguntum|seconda\s+guerra\s+punica|second\s+punic\s+war|hannibal|annibale/i,
+    fallbackPageKeys: ["Assedio_di_Sagunto", "Seconda_guerra_punica"],
   },
   {
     query: "Cartagine",
     matches: /cartagine|carthage/i,
     relevantSource: /cartagine|carthage|punic|fenici/i,
+    fallbackPageKeys: ["Cartagine", "Annibale"],
   },
   {
     query: "Scipione l'Africano",
@@ -114,13 +121,13 @@ const HISTORICAL_TOPICS: HistoricalTopic[] = [
     query: "Annibale e Roma",
     matches: /\broma\b|romano|repubblica romana/i,
     relevantSource: /annibale|hannibal|roma|romano|cartagine|punic/i,
-    fallbackPageKeys: ["Annibale", "Seconda_guerra_punica"],
+    fallbackPageKeys: ["Roma antica", "Seconda_guerra_punica", "Annibale"],
   },
   {
     query: "Annibale e la sua famiglia",
     matches: /famiglia|padre|amilcare|figli|fratelli/i,
     relevantSource: /annibale|amilcare|barca|asdrubale|magone/i,
-    fallbackPageKeys: ["Annibale", "Amilcare_Barca"],
+    fallbackPageKeys: ["Amilcare_Barca", "Annibale"],
   },
   {
     query: "Annibale Barca",
@@ -215,6 +222,53 @@ function relevanceScore(text: string, terms: string[]): number {
     if (!normalized.includes(term)) return score;
     return score + (normalized.startsWith(term) ? 4 : 1);
   }, 0);
+}
+
+function normalizeHistoricalText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("it-IT");
+}
+
+function findCachedHistoricalSources(query: string): WebSource[] {
+  const normalizedQuery = normalizeHistoricalText(query);
+  const terms = [...new Set(
+    simplifySearchQuery(normalizedQuery)
+      .split(/\s+/)
+      .filter((term) => term.length > 2),
+  )];
+
+  const rankedEntries = HISTORICAL_KNOWLEDGE.map((item) => {
+    const keywordMatches = item.keywords.reduce((score, keyword) => {
+      const normalizedKeyword = normalizeHistoricalText(keyword);
+      if (!normalizedQuery.includes(normalizedKeyword)) return score;
+      return score + (normalizedKeyword.includes(" ") ? 8 : 4);
+    }, 0);
+    const textScore = relevanceScore(
+      normalizeHistoricalText(`${item.source.title} ${item.source.excerpt}`),
+      terms,
+    );
+    return { source: item.source, score: keywordMatches + textScore };
+  })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  const selectedSources: WebSource[] = [];
+  const selectedUrls = new Set<string>();
+  for (const item of rankedEntries) {
+    if (selectedUrls.has(item.source.url)) continue;
+    selectedSources.push(item.source);
+    selectedUrls.add(item.source.url);
+    if (selectedSources.length === 3) break;
+  }
+  return selectedSources;
+}
+
+function findGeneralHistoricalSource(): WebSource | null {
+  return HISTORICAL_KNOWLEDGE.find((item) =>
+    item.keywords.includes("biografia"),
+  )?.source ?? null;
 }
 
 async function wikipediaJson<T>(url: URL): Promise<T> {
@@ -497,7 +551,27 @@ export async function researchHistoricalQuestion(query: string): Promise<WebSour
   const cached = researchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.sources;
 
-  const sources = await findHistoricalSources(normalizedQuery);
+  const localSources = findCachedHistoricalSources(normalizedQuery);
+  let sources = localSources;
+  if (sources.length === 0) {
+    try {
+      sources = await findHistoricalSources(normalizedQuery);
+    } catch (error) {
+      const generalSource = findGeneralHistoricalSource();
+      if (!generalSource) throw error;
+      console.error(
+        "Historical source lookup failed; using the local Annibale overview.",
+        error instanceof Error ? error.message : "Unknown error",
+      );
+      sources = [generalSource];
+    }
+  }
+
+  if (sources.length === 0) {
+    const generalSource = findGeneralHistoricalSource();
+    if (generalSource) sources = [generalSource];
+  }
+
   if (researchCache.size >= 100) {
     const oldestKey = researchCache.keys().next().value;
     if (oldestKey) researchCache.delete(oldestKey);
@@ -509,8 +583,12 @@ export async function researchHistoricalQuestion(query: string): Promise<WebSour
 export function formatResearchForPrompt(sources: WebSource[]): string {
   return sources
     .map(
-      (source, index) =>
-        `[${index + 1}] ${source.title} (${source.language})\nURL: ${source.url}\nEstratto: ${source.excerpt}`,
+      (source, index) => {
+        const contentLabel = source.language.includes("archivio locale")
+          ? "Scheda redazionale conservata localmente, non citazione letterale"
+          : "Estratto";
+        return `[${index + 1}] ${source.title} (${source.language})\nURL: ${source.url}\n${contentLabel}: ${source.excerpt}`;
+      },
     )
     .join("\n\n");
 }

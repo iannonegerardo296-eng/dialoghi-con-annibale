@@ -52,31 +52,44 @@ LLM_MODEL=openai/gpt-oss-20b
 
 La chiave resta nel solo `.env.local` lato server: non inserirla nel codice frontend e non pubblicarla. `openai/gpt-oss-20b` è il modello più leggero consigliato per risposte rapide; per risposte più articolate, verifica nel catalogo Groq se è disponibile `openai/gpt-oss-120b`, che può richiedere più tempo.
 
-### Altri provider remoti
+### Passaggio automatico a provider di riserva
+
+Puoi configurare uno o più provider compatibili con OpenAI Chat Completions. Quando il provider principale risponde con un limite/quota esaurita (`429`), un errore di autenticazione (`401`/`403`) o un errore temporaneo del servizio (`5xx`), il server prova in ordine i provider di riserva. Anche la correzione delle citazioni usa la stessa catena. Ogni provider può usare modello e chiave diversi.
+
+Esempio con Groq come principale e OpenRouter come riserva:
 
 ```dotenv
-LLM_API_KEY=la-tua-chiave-del-provider
-LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_MODEL=ID_DEL_MODELLO_DISPONIBILE
+LLM_API_KEY=la-tua-chiave-groq
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_MODEL=openai/gpt-oss-20b
+
+LLM_FALLBACK_PROVIDERS=openrouter
+LLM_OPENROUTER_API_KEY=la-tua-chiave-openrouter
+LLM_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+LLM_OPENROUTER_MODEL=ID_DEL_MODELLO_DISPONIBILE
 ```
 
-`LLM_BASE_URL` è la base dell'API compatibile, senza `/chat/completions`. La route funziona con provider remoti che implementano il formato OpenAI Chat Completions; endpoint diversi richiedono l'adattamento di `src/app/api/chat/route.ts`.
+`LLM_FALLBACK_PROVIDERS` è una lista ordinata di nomi separati da virgola. Per ogni nome, usa variabili `LLM_<NOME>_API_KEY`, `LLM_<NOME>_BASE_URL` e `LLM_<NOME>_MODEL`; per esempio il nome `openrouter` corrisponde a `LLM_OPENROUTER_*`. Puoi aggiungere altri nomi, ad esempio `openrouter,seconda_groq`. Tutti gli endpoint devono implementare `/chat/completions` e usare HTTPS. La chiave del provider primario e quelle di riserva non vengono mai inviate al browser.
+
+Il failover non combina quote o crediti: ogni provider deve avere una propria chiave, un modello disponibile e una quota attiva. Un errore `400` dovuto a una richiesta/modello non supportato non viene ritentato su altri provider; controlla che i modelli scelti supportino Chat Completions e i parametri inviati.
 
 ### Ricerca web prima della risposta
 
-Prima di chiamare il modello, il server usa la domanda attuale e, per i messaggi di seguito, le domande precedenti recenti per conservare il contesto. Semplifica la query, riconosce temi storici ricorrenti e lancia ricerche mirate esclusivamente nelle API MediaWiki di Wikipedia in italiano (`it.wikipedia.org`). Ordina i risultati per pertinenza, esclude pagine fuori tema, recupera estratti e li passa al modello come riferimenti; se la ricerca non trova pagine pertinenti, prova a recuperare direttamente voci italiane note su Annibale e sul tema chiesto. Se riesce a reperire una sola voce, indica che il riscontro è limitato. Più voci della stessa enciclopedia non sono considerate conferme indipendenti. Le domande circoscritte alle capacità e all'uso della chat ricevono una risposta diretta e non attivano la ricerca o i controlli delle citazioni storiche. Le ricerche riuscite vengono memorizzate in memoria per dieci minuti per contenere richieste ripetute. Annibale risponde sempre e soltanto in italiano. Ogni affermazione storica verificabile deve avere nel testo un richiamo `[1]`, `[2]` e così via, associato solo a una fonte che la sostiene; opinioni personali ed emozioni ipotetiche sono distinte dai fatti. Sotto la risposta, ogni collegamento può essere espanso per controllare l'estratto effettivamente consultato. Se non sono disponibili fonti pertinenti, la route comunica l'errore invece di produrre una risposta presentata come verificata. La ricerca invia la domanda e un breve contesto delle domande precedenti ai server Wikimedia; non inserire informazioni personali o riservate. Wikipedia è una fonte secondaria collaborativa: per lavori accademici controlla anche le fonti primarie e i riferimenti bibliografici delle voci.
+La ricerca usa la domanda e il contesto recente, dando priorità a una raccolta locale di sintesi redazionali concise su Annibale, le sue campagne, la Seconda guerra punica e i protagonisti. Ogni scheda indica la voce italiana di Wikipedia da cui partire per verificare l'argomento; il testo della scheda è una sintesi originale, non una citazione della voce. Le schede sono incluse nel codice e quindi disponibili subito anche quando Wikipedia limita o interrompe temporaneamente le richieste. Per argomenti non coperti, il server può cercare estratti aggiornati esclusivamente nelle API MediaWiki di Wikipedia in italiano (`it.wikipedia.org`) e memorizza in memoria i risultati per dieci minuti. Le citazioni numeriche nel testo rimandano alle schede o agli estratti mostrati sotto la risposta; fatti, interpretazioni e sentimenti ricostruiti sono distinti.
+
+Le domande sul nome, sull'identità e sulle capacità della chat ricevono risposte dirette, senza una digressione sulla Seconda guerra punica. Per eventi successivi alla vita di Annibale la chat chiarisce che non può parlarne come testimone. Le risposte storiche restano mirate alla domanda e non aggiungono un riassunto della guerra se non serve. Se il provider LLM esaurisce temporaneamente la quota, la chat mostra una scheda storica pertinente con fonte invece di perdere la risposta; per errori temporanei recuperabili, il messaggio rimasto senza risposta può essere ritentato senza duplicare la domanda. La ricerca invia domanda e breve contesto ai server Wikimedia solo quando serve; non inserire informazioni personali o riservate. Wikipedia è una fonte secondaria collaborativa: per lavori accademici controlla anche le fonti primarie e i riferimenti bibliografici delle voci.
 
 ## Pubblicazione su GitHub e Vercel
 
 La repository pubblica è [iannonegerardo296-eng/dialoghi-con-annibale](https://github.com/iannonegerardo296-eng/dialoghi-con-annibale). Importala in Vercel come progetto Next.js e abilita i deploy automatici dalla branch `main`.
 
-Nel Marketplace Vercel collega una risorsa Neon PostgreSQL al progetto. Configura `DATABASE_URL` (preferisci la connessione pooled), `CHAT_STORAGE_SECRET`, `LLM_API_KEY`, `LLM_BASE_URL` e `LLM_MODEL` in **Project Settings → Environment Variables**, almeno per Production e Preview, poi ridistribuisci. Le route di chat e archivio richiedono runtime Node.js. Il database deve essere persistente; non salvare SQLite nel filesystem delle funzioni serverless.
+Nel Marketplace Vercel collega una risorsa Neon PostgreSQL al progetto. Configura `DATABASE_URL` (preferisci la connessione pooled), `CHAT_STORAGE_SECRET`, `LLM_API_KEY`, `LLM_BASE_URL` e `LLM_MODEL` in **Project Settings → Environment Variables**, almeno per Production e Preview. Per il failover aggiungi `LLM_FALLBACK_PROVIDERS` e le variabili `LLM_<NOME>_*` corrispondenti a ciascun provider di riserva; poi ridistribuisci. Le route di chat e archivio richiedono runtime Node.js. Il database deve essere persistente; non salvare SQLite nel filesystem delle funzioni serverless.
 
 Genera `CHAT_STORAGE_SECRET` con il comando PowerShell qui sopra e aggiungilo solo come variabile segreta in Vercel. Non caricare mai `.env.local` o token nel repository. Vercel inoltra l'IP client tramite `x-forwarded-for`; davanti all'app non collocare proxy che lascino manipolare tale intestazione.
 
 La chat è condivisa tra utenti con lo stesso IP; informali di questa modalità e dei 90 giorni di conservazione prima della pubblicazione.
 
-Il browser invia messaggi alla route Next.js `/api/chat`. La route aggiunge il prompt storico e inoltra la richiesta al provider. Non chiamare il provider direttamente dal browser: il codice client è ispezionabile e una chiave inserita lì può essere sottratta. Le variabili `LLM_API_KEY`, `LLM_BASE_URL` e `LLM_MODEL` non hanno prefisso `NEXT_PUBLIC_` e sono lette solo nel server. Riavvia `npm run dev` dopo aver modificato `.env.local`.
+Il browser invia messaggi alla route Next.js `/api/chat`. La route aggiunge il prompt storico e inoltra la richiesta al provider primario, passando alle riserve configurate in caso di quota esaurita o indisponibilità. Non chiamare i provider direttamente dal browser: il codice client è ispezionabile e una chiave inserita lì può essere sottratta. Le variabili dei provider non hanno prefisso `NEXT_PUBLIC_` e sono lette solo nel server. Riavvia `npm run dev` dopo aver modificato `.env.local`.
 
 La cronologia inviata al modello è limitata agli ultimi 18 messaggi. L'archivio PostgreSQL conserva fino a 40 conversazioni per IP, con un massimo di 100 messaggi per conversazione. Gli archivi inattivi da oltre 90 giorni vengono eliminati automaticamente; “Elimina archivio condiviso” rimuove subito tutte le chat associate all'IP e richiede conferma. Tutti i visitatori con lo stesso IP condividono il medesimo archivio: reti aziendali, universitarie, VPN e operatori mobili possono mettere persone diverse dietro un unico IP. L'IP può inoltre cambiare quando si cambia rete. Questo sistema non è un'identità né un controllo di accesso.
 
@@ -107,7 +120,7 @@ Il personaggio è una ricostruzione conversazionale, non una fonte. La voce espr
 
 - **Servizio non configurato:** controlla che `.env.local` sia nella radice, contenga le variabili del provider e `CHAT_STORAGE_SECRET`, quindi riavvia il server.
 - **Errore 502:** verifica URL base, modello, chiave e disponibilità del provider. La route restituisce messaggi generici al browser; i dettagli non vengono esposti al client.
-- **Errore 429:** la protezione locale ha raggiunto 10 richieste nel minuto corrente; attendi il reset.
+- **Errore 429:** può dipendere dal limite locale di 10 richieste al minuto oppure dalla quota temporanea del provider LLM; attendi il reset e controlla anche il pannello del provider.
 - **Archivio non caricato/salvato:** controlla che `DATABASE_URL` e `CHAT_STORAGE_SECRET` siano configurate e che il proxy inoltri l'IP reale negli header attesi.
 - **Movimento ridotto:** abilita la preferenza di sistema “Riduci movimento”; l'avatar resta statico e i contenuti restano disponibili.
 

@@ -6,6 +6,7 @@ export interface ChatMessageData {
   content: string;
   createdAt: number;
   sources?: WebSource[];
+  isHistoricalFallback?: boolean;
 }
 
 export interface ApiMessage {
@@ -30,6 +31,7 @@ export interface ChatRequest {
 export interface ChatResponse {
   response: string;
   sources: WebSource[];
+  isHistoricalFallback?: boolean;
 }
 
 export interface ChatErrorResponse {

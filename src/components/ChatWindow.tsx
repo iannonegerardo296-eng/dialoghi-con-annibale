@@ -20,6 +20,7 @@ interface ChatWindowProps {
   loading: boolean;
   error: string | null;
   onDismissError: () => void;
+  onRetry?: () => void;
   status: AvatarStatus;
   animatedMessageId: string | null;
   detailLevel: ResponseDetail;
@@ -35,6 +36,7 @@ export function ChatWindow({
   loading,
   error,
   onDismissError,
+  onRetry,
   status,
   animatedMessageId,
   detailLevel,
@@ -46,7 +48,36 @@ export function ChatWindow({
 
   useEffect(() => {
     const panel = panelRef.current;
-    if (!panel || reducedMotion) return;
+    if (
+      !panel ||
+      reducedMotion ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      messages.length !== 0
+    ) {
+      return;
+    }
+
+    const context = gsap.context(() => {
+      gsap.fromTo(
+        [".welcome-editorial", ".suggestion-link"],
+        { autoAlpha: 0, y: 12 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.42,
+          stagger: 0.07,
+          ease: "power2.out",
+          clearProps: "all",
+        },
+      );
+    }, panel);
+
+    return () => context.revert();
+  }, [messages.length, reducedMotion]);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const context = gsap.context(() => {
       gsap.fromTo(
@@ -81,7 +112,7 @@ export function ChatWindow({
           <h2>La conversazione</h2>
         </div>
 
-        <span className="conversation-indicator">
+        <span className={`conversation-indicator${loading ? " conversation-indicator--thinking" : ""}`}>
           <i aria-hidden="true" />
           {messages.length ? "Dialogo aperto" : "In attesa"}
         </span>
@@ -123,6 +154,11 @@ export function ChatWindow({
       {error && (
         <div className="error-banner" role="alert">
           <p>{error}</p>
+          {onRetry && (
+            <button className="error-retry" type="button" onClick={onRetry}>
+              Riprova
+            </button>
+          )}
           <button type="button" onClick={onDismissError} aria-label="Chiudi il messaggio di errore">
             ×
           </button>

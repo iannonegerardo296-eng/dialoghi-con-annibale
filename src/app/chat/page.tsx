@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpenText, MessageSquareText, Plus, Settings2, Trash2 } from "lucide-react";
+import { ArrowLeft, BookOpenText, MessageSquareText, Plus, Settings2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { AnnibalAvatar, type AvatarStatus } from "@/components/AnnibalAvatar";
 import { ChatWindow } from "@/components/ChatWindow";
-import { HistoricalContext } from "@/components/HistoricalContext";
 import { MAX_HISTORY_MESSAGES, STORAGE_KEY, toApiMessages } from "@/lib/constants";
 import type { ChatMessageData, ChatResponse, ResponseDetail, WebSource } from "@/lib/chatTypes";
 import type { ConversationStore, StoredConversation } from "@/lib/conversationTypes";
@@ -20,7 +19,9 @@ function isStoredMessage(value: unknown): value is ChatMessageData {
     typeof message.id === "string" &&
     (message.role === "user" || message.role === "assistant") &&
     typeof message.content === "string" &&
-    typeof message.createdAt === "number"
+    typeof message.createdAt === "number" &&
+    (message.isHistoricalFallback === undefined ||
+      typeof message.isHistoricalFallback === "boolean")
   );
 }
 
@@ -103,6 +104,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryDraft, setRetryDraft] = useState<string | null>(null);
   const [animatedMessageId, setAnimatedMessageId] = useState<string | null>(null);
   const [detailLevel, setDetailLevel] = useState<ResponseDetail>("normal");
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
@@ -252,31 +254,37 @@ export default function Home() {
   }, [conversationStore, historyLoaded, storageReady]);
 
   const sendMessage = useCallback(
-    async (draft = input) => {
+    async (draft = input, retryUnanswered = false) => {
       const content = draft.trim();
       if (!content || loading || !storageReady || !activeConversation) return;
 
-      const userMessage = createMessage("user", content);
-      const nextMessages = [...messages, userMessage].slice(-100);
+      const pendingMessage = retryUnanswered ? messages.at(-1) : null;
+      if (retryUnanswered && pendingMessage?.role !== "user") return;
+
+      const userMessage = pendingMessage ?? createMessage("user", content);
+      const nextMessages = retryUnanswered ? messages : [...messages, userMessage].slice(-100);
       const conversationId = activeConversation.id;
-      setConversationStore((current) => ({
-        ...current,
-        conversations: current.conversations.map((conversation) =>
-          conversation.id === conversationId
-            ? {
-                ...conversation,
-                title:
-                  conversation.title === "Nuova conversazione"
-                    ? content.slice(0, 54)
-                    : conversation.title,
-                updatedAt: userMessage.createdAt,
-                messages: nextMessages,
-              }
-            : conversation,
-        ),
-      }));
+      if (!retryUnanswered) {
+        setConversationStore((current) => ({
+          ...current,
+          conversations: current.conversations.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  title:
+                    conversation.title === "Nuova conversazione"
+                      ? content.slice(0, 54)
+                      : conversation.title,
+                  updatedAt: userMessage.createdAt,
+                  messages: nextMessages,
+                }
+              : conversation,
+          ),
+        }));
+      }
       setInput("");
       setError(null);
+      setRetryDraft(null);
       setLoading(true);
 
       try {
@@ -311,7 +319,9 @@ export default function Home() {
           !payload.response.trim() ||
           !("sources" in payload) ||
           !Array.isArray(payload.sources) ||
-          !payload.sources.every(isWebSource)
+          !payload.sources.every(isWebSource) ||
+          ("isHistoricalFallback" in payload &&
+            typeof payload.isHistoricalFallback !== "boolean")
         ) {
           throw new Error("La risposta ricevuta non è valida. Riprova.");
         }
@@ -320,6 +330,7 @@ export default function Home() {
         const assistantMessage = {
           ...createMessage("assistant", answer.response),
           ...(answer.sources.length > 0 ? { sources: answer.sources } : {}),
+          ...(answer.isHistoricalFallback ? { isHistoricalFallback: true } : {}),
         };
         setConversationStore((current) => ({
           ...current,
@@ -335,6 +346,7 @@ export default function Home() {
         }));
         setAnimatedMessageId(assistantMessage.id);
       } catch (requestError) {
+        setRetryDraft(content);
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -358,6 +370,7 @@ export default function Home() {
     }));
     setInput("");
     setError(null);
+    setRetryDraft(null);
     setAnimatedMessageId(null);
   };
 
@@ -365,6 +378,7 @@ export default function Home() {
     setConversationStore((current) => ({ ...current, activeId: conversationId }));
     setInput("");
     setError(null);
+    setRetryDraft(null);
     setAnimatedMessageId(null);
   };
 
@@ -401,6 +415,7 @@ export default function Home() {
       const initial = createConversation();
       setConversationStore({ conversations: [initial], activeId: initial.id });
       setInput("");
+      setRetryDraft(null);
       setAnimatedMessageId(null);
     } catch (requestError) {
       setError(
@@ -474,6 +489,10 @@ export default function Home() {
 
         <section className="conversation-column" aria-label="Dialogo con Annibale">
           <header className="conversation-header">
+            <Link className="conversation-home-link" href="/" aria-label="Torna alla pagina iniziale">
+              <ArrowLeft size={16} aria-hidden="true" />
+              <span>Dialoghi</span>
+            </Link>
             <div>
               <span className="conversation-kicker">CARTAGINE · III SECOLO A.C.</span>
               <h1>Annibale</h1>
@@ -509,6 +528,7 @@ export default function Home() {
             loading={loading || !historyLoaded || !storageReady}
             error={error}
             onDismissError={() => setError(null)}
+            onRetry={retryDraft ? () => void sendMessage(retryDraft, true) : undefined}
             status={status}
             animatedMessageId={animatedMessageId}
             detailLevel={detailLevel}
@@ -519,9 +539,6 @@ export default function Home() {
         <aside className="context-rail" aria-label="Contesto storico">
           <div className="portrait-context">
             <AnnibalAvatar status={status} />
-          </div>
-          <div id="context-card">
-            <HistoricalContext />
           </div>
           <div className="history-note" id="historical-note">
             <BookOpenText size={15} aria-hidden="true" />

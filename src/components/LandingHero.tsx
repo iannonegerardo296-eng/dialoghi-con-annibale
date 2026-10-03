@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { gsap } from "gsap";
 import Link from "next/link";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { AnnibalAvatar } from "@/components/AnnibalAvatar";
 
 const KEY_DATES = [
   { date: "218 a.C.", place: "Le Alpi" },
@@ -18,41 +19,61 @@ export function LandingHero() {
 
   useEffect(() => {
     const hero = heroRef.current;
-    if (!hero || reducedMotion) return;
+    if (
+      !hero ||
+      reducedMotion ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
 
     const context = gsap.context(() => {
-      gsap.fromTo(
-        ".hero-reveal",
-        { opacity: 0, y: 18 },
+      const copy = hero.querySelectorAll<HTMLElement>(
+        ".hero-kicker, .hero-title, .hero-description, .hero-actions",
+      );
+      const dates = hero.querySelectorAll<HTMLElement>(".hero-date");
+      const portrait = hero.querySelector<HTMLElement>(".hero-portrait");
+      const timeline = gsap.timeline();
+
+      timeline.fromTo(
+        copy,
+        { autoAlpha: 0, y: 14 },
         {
-          opacity: 1,
+          autoAlpha: 1,
           y: 0,
-          duration: 0.75,
-          stagger: 0.11,
-          ease: "power3.out",
+          duration: 0.52,
+          stagger: 0.075,
+          ease: "power2.out",
           clearProps: "all",
         },
       );
-      gsap.fromTo(
-        ".hero-medallion",
-        { opacity: 0, scale: 0.9, rotation: -8 },
-        { opacity: 1, scale: 1, rotation: 0, duration: 1.2, delay: 0.25, ease: "power2.out" },
+      timeline.fromTo(
+        dates,
+        { autoAlpha: 0, y: 8 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.36,
+          stagger: 0.07,
+          ease: "power2.out",
+          clearProps: "all",
+        },
+        "-=0.2",
       );
-      gsap.to(".hero-medallion-ring", {
-        rotation: 360,
-        duration: 90,
-        repeat: -1,
-        ease: "none",
-        transformOrigin: "50% 50%",
-      });
-      gsap.to(".hero-medallion-glow", {
-        opacity: 0.72,
-        scale: 1.08,
-        duration: 3.6,
-        repeat: -1,
-        yoyo: true,
-        ease: "sine.inOut",
-      });
+      if (portrait) {
+        timeline.fromTo(
+          portrait,
+          { autoAlpha: 0, x: 10 },
+          {
+            autoAlpha: 1,
+            x: 0,
+            duration: 0.56,
+            ease: "power2.out",
+            clearProps: "all",
+          },
+          0.14,
+        );
+      }
     }, hero);
 
     return () => context.revert();
@@ -60,58 +81,47 @@ export function LandingHero() {
 
   return (
     <section className="landing-hero" ref={heroRef} aria-labelledby="hero-title">
-      <div className="hero-copy">
-        <div className="hero-kicker hero-reveal">
-          <span className="hero-kicker-rule" />
-          <span>Una voce dal Mediterraneo antico</span>
+      <div className="hero-layout">
+        <div className="hero-copy">
+          <div className="hero-kicker hero-reveal">
+            <span className="hero-kicker-rule" />
+            <span>Cartagine · III secolo a.C.</span>
+          </div>
+
+          <h1 className="hero-title hero-reveal" id="hero-title">
+            Incontra Annibale.
+            <br />
+            <em>Interroga la storia.</em>
+          </h1>
+
+          <p className="hero-description hero-reveal">
+            Una conversazione con il generale cartaginese, ricostruita con attenzione
+            alle fonti. Chiedi delle sue scelte, dei suoi viaggi o del mondo che
+            conobbe: ciò che è incerto viene detto apertamente.
+          </p>
+
+          <div className="hero-actions hero-reveal">
+            <Link className="hero-primary-action" href="/chat">
+              Inizia la conversazione
+              <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
+
+          <div className="hero-dates hero-reveal" aria-label="Tre date chiave">
+            {KEY_DATES.map((item, index) => (
+              <div className="hero-date" key={item.date}>
+                {index > 0 && <span className="hero-date-divider" aria-hidden="true" />}
+                <strong>{item.date}</strong>
+                <span>{item.place}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <h2 className="hero-title hero-reveal" id="hero-title">
-          La storia non è
-          <br />
-          <em>mai una linea retta.</em>
-        </h2>
-
-        <p className="hero-description hero-reveal">
-          Attraversa date, luoghi e scelte decisive della Seconda guerra punica.
-          Incontra Annibale in un dialogo storico guidato dalle fonti e attento
-          a ciò che non possiamo sapere con certezza.
-        </p>
-
-        <div className="hero-actions hero-reveal">
-          <Link className="hero-primary-action" href="/chat">
-            Entra nel dialogo
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
-          <a className="hero-secondary-action" href="#historical-note">
-            Il metodo storico
-            <ArrowUpRight size={15} aria-hidden="true" />
-          </a>
-        </div>
-
-        <div className="hero-dates hero-reveal" aria-label="Tre date chiave">
-          {KEY_DATES.map((item, index) => (
-            <div className="hero-date" key={item.date}>
-              {index > 0 && <span className="hero-date-divider" aria-hidden="true" />}
-              <strong>{item.date}</strong>
-              <span>{item.place}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="hero-medallion" aria-hidden="true">
-        <div className="hero-medallion-glow" />
-        <div className="hero-medallion-ring">
-          <span className="hero-medallion-tick hero-medallion-tick--top" />
-          <span className="hero-medallion-tick hero-medallion-tick--bottom" />
-          <span className="hero-medallion-tick hero-medallion-tick--left" />
-          <span className="hero-medallion-tick hero-medallion-tick--right" />
-        </div>
-        <div className="hero-medallion-center">
-          <span className="hero-medallion-name">Barca</span>
-          <span className="hero-medallion-era">III · secolo a.C.</span>
-        </div>
+        <aside className="hero-portrait hero-reveal" aria-label="Ritratto artistico di Annibale">
+          <AnnibalAvatar status="listening" />
+          <p>Un volto immaginato dalle fonti, non una ricostruzione autentica.</p>
+        </aside>
       </div>
     </section>
   );

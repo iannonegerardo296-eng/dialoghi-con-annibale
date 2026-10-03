@@ -45,6 +45,8 @@ function isStoredMessage(value: unknown): value is ChatMessageData {
     typeof message.content === "string" &&
     message.content.length <= 12_000 &&
     typeof message.createdAt === "number" &&
+    (message.isHistoricalFallback === undefined ||
+      typeof message.isHistoricalFallback === "boolean") &&
     (!("sources" in message) ||
       (Array.isArray(message.sources) && message.sources.every(isWebSource)))
   );
